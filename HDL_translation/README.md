@@ -1,6 +1,6 @@
 # CNN Hardware Modules
 
-This repository contains two tightly coupled Verilog modules designed to perform high-throughput inference using 1D convolutional neural networks on FPGA hardware. The design emphasizes **determinism**, **fixed-point efficiency**, and **instruction-driven control** with a focus on integer-only computation and straightforward hardware mapping.
+This repository contains two tightly coupled Verilog modules designed to perform high-throughput inference using 1D convolutional neural networks on FPGA hardware. The design emphasizes **determinism**, **integer efficiency**, and **instruction-driven control** with a focus on integer-only computation and straightforward hardware mapping.
 
 ---
 
