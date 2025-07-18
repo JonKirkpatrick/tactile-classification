@@ -14,11 +14,12 @@ This is the primary controller for all convolution operations. It decodes a comp
 - Vector preparation for dot product
 - ReLU activation and (soon) MaxPooling
 
-### `vector_packer_256.sv`
-A specialized data preparation unit that:
-- Collects tensor and weight elements into 256-element vectors
-- Handles padding and alignment logic
-- Ensures consistency of vector formats regardless of orientation
+### `int_8_vector_core.sv`
+A specialized computation unit that:
+- Computes, quantizes and applies activation to signed int8 vectors
+- Handles groups of smaller vectors in parallel, up to a total count of 256 elements in power of two packages
+- Will process and return dot products of any compatible width in two cycles once the pipeline is filled
+- The pipeline can contain a maximum of 7 256 wide vectors at a given time.
 
 ---
 
@@ -30,9 +31,8 @@ These modules are under active development. The focus has been on:
 - Preparing for integration with the dot product engine
 
 Near-term goals:
-- Implement pointwise mode
+- Conclude testing of primary convolution logic
 - Finalize and test pooling logic
-- Integrate live instruction decoding and result output
 
 ---
 
