@@ -13,7 +13,8 @@ module int8_vector_core (
 
     output logic signed [7:0]  output_packed [64],   // 8-bit signed values
     output logic signed [31:0] partial_raw_output,   // full raw value if partial_product = 1
-    output logic valid
+    output logic valid,
+    output logic toggle
 );
 
     // === Module Description ===
@@ -38,7 +39,7 @@ module int8_vector_core (
     // relu_active: Flag to apply ReLU activation on the quantized output.
 
     // === Outputs ===
-    // output_packed: Array of 32 quantized 8-bit signed values.
+    // output_packed: Array of 64 quantized 8-bit signed values.
     // partial_raw_output: Raw 32-bit sum if partial_product is set.
     // valid: Indicates when the output is ready.
 
@@ -136,13 +137,16 @@ module int8_vector_core (
                 for (int j = 0; j < 64; j++) begin
                     automatic logic signed [31:0] shifted;
                     shifted = selected_values[j] >>> shift_amt;
-                    if (shifted > 127)        quantized[j] <= 8'sd127;
-                    else if (shifted < -128) quantized[j] <= -8'sd128;
-                    else                     quantized[j] <= shifted[7:0];
 
-                    // Apply ReLU activation if enabled
-                    if (relu_active && quantized[j] < 0)
+                    // Clip to int8 range
+                    if (shifted > 127)        shifted = 127;
+                    else if (shifted < -128) shifted = -128;
+
+                    // Apply ReLU before assigning
+                    if (relu_active && shifted < 0)
                         quantized[j] <= 8'sd0;
+                    else
+                        quantized[j] <= shifted[7:0];
                 end
             end
         end
@@ -170,7 +174,6 @@ module int8_vector_core (
 
     localparam PIPELINE_DEPTH = 14;
     logic [PIPELINE_DEPTH-1:0] delay_line;
-    logic toggle;
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin

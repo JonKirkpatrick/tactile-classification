@@ -1,6 +1,8 @@
 `include "int8_vector_core.sv"
 
 // === Struct Definition ===
+// In order to treat every convolution layer in our model as a depthwise 1d convolution,
+// we define a struct to hold the context and semantics of the synthetic convolution layer.
 typedef struct packed {
     logic        first_block;
     logic        data_context;
@@ -23,12 +25,26 @@ typedef struct packed {
     logic [8:0]  current_group;
     logic [8:0]  kernel_position;
     logic [15:0] temporal_length;
-
 } conv_context_t;
 
+
+// === Convolution Module ===
+//
+// This module encompasses the entire CNN model.
+// It reads its layer description as an instruction from a memory block,
+// and it uses the int8_vector_core module to perform the actual convolution operations.
+// The convolution module is designed to be flexible and can handle various types of convolutional layers,
+// including depthwise, pointwise, and fully connected layers.
+// There are certain limitations and constraints on model architecture that are imposed by the instructions.
+//
+
+
+// This signature will be changed once development is complete.
+// Instructions will be read from a memory block.
 module convolution (
     input logic clk,
     input logic reset,
+    input logic start,
     input logic signed [7:0] input_tensor [0:8191],
     input logic [63:0] current_instr,
     output logic [7:0] inferred_class,
@@ -42,10 +58,14 @@ module convolution (
     localparam int INSTR_MEM_DEPTH = 256;
 
     //initial $readmemh("parameters.hex", param_mem);
-    //initial $readmemh("instructions.hex", instr_mem);
+    initial $readmemh("instructions.hex", instr_mem);
 
     // Instruction Format:
+
     // 32-bits[63:32]  - Experimental instruction block
+    // 4-bits [63:60]  - Relationship between batch and channels (log2 of batches per channel or literal of channels per batch)
+    // 1-bit  [59]     - First pointwise convolution (1) or not (0) (allows non-standard channel sizes)
+
     // 1-bit  [31]     - First block (1) or not (0)
     // 1-bit  [30]     - Apply ReLU (1) or not (0)
     // 1-bit  [29]     - Global Average Pooling (1) or not (0)
@@ -57,23 +77,27 @@ module convolution (
     // 4-bits [7:4]    - Shift amount for quantization to int8
     // 4-bits [3:0]    - Packet size (ceiling of the (log2 of the kernel size) - 1)
 
-    conv_context_t ctx;
-    logic temporal_axis;
-    logic start;
-    logic partial_product;
-    //logic [63:0] current_instr;
-    logic [15:0] current_batch;
+    conv_context_t ctx;  // Semantically rich context for the convolution operation
+    logic temporal_axis; // Indicates if the tensor is aligned in memory in temporal-major order
+    logic [31:0] batches_processed; // Number of batches processed so far
+    logic partial_product; // Flag to indicate the dot product being computed is larger than 256 elements wide.
+    //logic [63:0] current_instr;  // Current instruction being processed
+    logic [15:0] current_batch; // Current batch of 256 inputs and parameters being processed
+
+
     logic signed [7:0] param_mem [0:PARAM_MEM_DEPTH-1]; // Parameter memory for weights
-    logic [31:0] instr_mem [0:INSTR_MEM_DEPTH-1]; // Instruction memory for CNN blocks
-    logic [31:0] pointer_advance;
-    logic [7:0] intermediate_results [0:16383][2]; // Intermediate results buffer
+    logic [63:0] instr_mem [0:INSTR_MEM_DEPTH-1]; // Instruction memory for CNN layers
+    
+    
+    logic [31:0] pointer_advance; // The amount to advance the parameter pointer after current layer
+    logic signed [7:0] intermediate_results [0:16383][2]; // Intermediate results buffer
     logic signed [7:0] vector_a [0:255]; // Vector A for dot product
     logic signed [7:0] vector_b [0:255]; // Vector B for dot product
     logic signed [7:0] dot_product_return [0:63]; // Dot product results
     logic signed [31:0] raw_output; // Raw output for partial products
 
     // Raw Instruction Fields
-    logic first_pw;
+    logic first_pw; // First pointwise convolution in the model
     logic relu_active;
     logic global_avg_pool;
     logic [2:0] maxpool;
@@ -88,31 +112,16 @@ module convolution (
     // Interpretted Instruction Fields
     logic [8:0] in_chan;
     logic [8:0] out_chan;
-    logic [4:0] kernel_padding;
-    logic [31:0] actual_tensor_size;
     logic [15:0] temporal_length;
     logic [4:0] pool_amt [2];
     logic [3:0] tap_level;
     
-    // Packing Counters
-    logic [15:0] kernel_count; // Counter for how many kernels have been processed on current channel
-    logic [8:0] pack_position; // Position in the current pack
-    logic [8:0] pack_batch_counter; // Counter for how many batches have been processed
-
-    // Coordinate Resolution
-    logic signed [31:0] tensor_index;
-    logic signed [31:0] tap_offset;
-    logic [8:0]  current_channel;
-    logic [8:0]  temporal_position;
-    logic [8:0]  current_group;
-    logic [8:0]  kernel_position;
-
+    // === These are just for simulation and must be removed in production ===
     initial begin
         // Populate weight memory with some test data
         for (int i = 0; i < 169; i++) begin
             param_mem[i] = i - 84;
         end
-        ctx.pong = 0;
     end
 
 
@@ -125,18 +134,16 @@ module convolution (
         .tap_level(tap_level),
         .shift_amt(shift_amt),
         .partial_product(partial_product),
+        .relu_active(relu_active),
         .output_packed(dot_product_return),
         .partial_raw_output(raw_output),
-        .relu_active(relu_active),
-        .valid(valid)
+        .valid(valid),
+        .toggle(toggle)
     );
 
     always_comb begin
 
         // Populate Raw Instruction Fields
-        current_batch = 103;
-        ctx.weight_pointer = 0;
-
         ctx.first_block = current_instr[31];
         relu_active = current_instr[30];
         global_avg_pool = current_instr[29];
@@ -168,7 +175,6 @@ module convolution (
         end
 
         temporal_length = 1 << time_steps;
-        actual_tensor_size = temporal_length * in_chan;
         pool_amt[0] = 1 << maxpool;
         pool_amt[1] = 1;
         tap_level = packet + 1;
@@ -182,6 +188,7 @@ module convolution (
             ctx.stride = 1;
             ctx.tensor_size = temporal_length * in_chan;
             ctx.in_chan = in_chan;
+            ctx.weight_pointer = 0; // Pointer to the start of weights
             ctx.data_context = 0;
             temporal_axis = 0;
             ctx.dots_per_channel = temporal_length;
@@ -222,12 +229,12 @@ module convolution (
 
         // Determine Optimal Vector Packing Strategy
         begin
-            ctx.pack_size = 2 << packet;
-            ctx.pack_count = 1 << (7 - packet);
-            ctx.pack_batch = out_chan * temporal_length >> (7 - packet);
+            ctx.pack_size = 2 << packet; // The size of each vector to be packed
+            ctx.pack_count = 1 << (7 - packet); // The number of packed vectors per batch
+            ctx.pack_batch = out_chan * temporal_length >> (7 - packet); // The number of batches per convolution layer
         end
 
-        // Determine Position based on Batch
+        // We use this to determine the correct offsets to apply when packing vectors for the dot product unit.
         begin
             if (ctx.pack_count < ctx.dots_per_channel) begin
                 if (ctx.in_chan > 1) begin
@@ -244,6 +251,10 @@ module convolution (
             end
         end
     end
+
+    // === Vector Packing Routine ===
+    // This routine packs the input tensor and weights into vectors for the dot product unit.
+    // It uses the context defined above to determine the correct offsets and packing strategy.
 
     always_comb begin
     automatic int tensor_index;
@@ -315,7 +326,46 @@ module convolution (
                 if (in_chan > 1)
                     current_channel++;
             end
+        end
     end
-end
 
+    // === The actual convolution operation ===
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            current_batch <= 0;
+            busy <= 1'b0;
+            done <= 1'b0;
+            ctx.pong <= 0;
+            batches_processed <= 0;
+
+        end else if (start) begin
+            busy <= 1'b1;
+            done <= 1'b0;
+
+        end else if (busy) begin
+            if (valid) begin
+                // Process the current batch of convolution
+                if (batches_processed < ctx.pack_batch) begin
+                    // Perform the dot product operation
+                    for (int i = 0; i < 64; i++) begin
+                        if (i < ctx.pack_count) begin
+                            intermediate_results[batches_processed * ctx.pack_count + i][~ctx.pong] <= dot_product_return[i];
+                        end
+                    end
+                    batches_processed <= batches_processed + 1;
+                end else begin
+                    // End of the layer, prepare for the next one
+                    current_batch <= 0;
+                    done <= 1'b1; // Indicate that the layer processing is done
+                end
+            end
+
+            if (toggle) begin
+                if (current_batch < ctx.pack_batch) begin
+                    // Advance to the next batch
+                    current_batch <= current_batch + 1;
+                end
+            end
+        end
+    end
 endmodule

@@ -9,11 +9,13 @@ module convolution_tb;
     logic [7:0] inferred_class;
     logic busy;
     logic done;
+    logic start;
 
     // Instantiate your module
     convolution uut (
         .clk(clk),
         .reset(reset),
+        .start(start),
         .input_tensor(input_tensor),
         .current_instr(current_instr),
         .inferred_class(inferred_class),
@@ -27,11 +29,15 @@ module convolution_tb;
     initial begin
         // Test setup
         reset = 1;
-        #10;
+        @(posedge clk);
         reset = 0;
+        @(posedge clk);
+        start = 1;
+        @(posedge clk);
+        start = 0;
 
         for (int i = 0; i < 1664; i++) begin
-            input_tensor[i] = 8'sd1;
+            input_tensor[i] = i % 256 - 128; // Example input data
         end        
 
         // Instruction format recap:
@@ -50,10 +56,9 @@ module convolution_tb;
         // padding=6 (13x1 kernel), time_steps=7 (128),
         // in_channels=13 (literal=13), out_channels=ignored,
         // shift=0, packet=3 (pack_size=16)
-        current_instr = 64'b_0011_0000_0000_0000_0000_0000_0000_0000_1_0_0_000_0110_0111_001101_0000_1010_0011;
+        current_instr = 64'h30000000819CD0A3;
         // current_instr =    64'b_0011_1000_0000_0000_0000_0000_0000_0000_0_1_0_010_0000_0111_001101_0110_0000_0011;
-        #10; // Wait for combinational logic to propagate
-
+        @(posedge clk);
         $display("Decoded Instruction:");
         $display("  first_block     = %b", uut.ctx.first_block);
         $display("  relu_active     = %b", uut.relu_active);
@@ -80,6 +85,12 @@ module convolution_tb;
         $display("  first_pw = %b", uut.first_pw);
         $display("  vector_a = %p", uut.vector_a);
         $display("  vector_b = %p", uut.vector_b);
+        wait(done);
+        $display("Done signal received. Test completed successfully.");
+        for (int i = 1600; i < 1665; i++) begin
+            $display("intermediate[%0d] = %0d", i, uut.intermediate_results[i][~uut.ctx.pong]);
+        end
+
         $finish;
     end
 endmodule
