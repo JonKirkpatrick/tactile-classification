@@ -3,98 +3,134 @@
 // === Struct Definition ===
 // In order to treat every convolution layer in our model as a depthwise 1d convolution,
 // we define a struct to hold the context and semantics of the synthetic convolution layer.
+
 typedef struct packed {
-    logic        first_block;
-    logic        data_context;
-    logic        pong;
-    logic [31:0] weight_pointer;
+    logic        first_block;       // Indicates if this is the first block in the model
+    logic        data_context;      // 0 for input/intermediate tensor, 1 for weights in param_mem
+    logic        pong;              // Used to toggle between two sets of intermediate results
+    logic [31:0] weight_pointer;    // Pointer to the first weight in layer's parameters
 
-    logic [4:0]  padding;
-    logic [31:0] tensor_size;
-    logic [8:0]  in_chan;
-    logic [8:0]  kernel_size;
-    logic [8:0]  pack_size;
-    logic [7:0]  pack_count;
-    logic [31:0] pack_batch;
+    logic [8:0]  kernel_size;       // Size of the kernel for the convolution
+    logic [4:0]  padding;           // Padding size
+    logic [8:0]  stride;            // Stride for the convolution
 
-    logic [8:0]  stride;
-    logic [15:0] dots_per_channel;
-    logic [8:0]  group_size;
-    logic [8:0]  current_channel;
-    logic [15:0]  temporal_position;
-    logic [8:0]  current_group;
-    logic [8:0]  kernel_position;
-    logic [15:0] temporal_length;
+    logic [31:0] tensor_size;       // Number of elements in the input tensor
+    logic [8:0]  in_chan;           // Number of input channels
+    logic [8:0]  group_size;        // Size of the group for the convolution
+    logic [15:0] temporal_length;   // Length of the temporal dimension
+
+    logic [8:0]  pack_size;         // Size of each vector to be packed
+    logic [7:0]  pack_count;        // Number of packed vectors per batch
+    logic [31:0] pack_batch;        // Number of batches per convolution layer
+
+    logic [8:0]  current_channel;   // Current channel being processed
+    logic [15:0] temporal_position; // Current position in the temporal dimension
+    logic [8:0]  current_group;     // Current group being processed
+    logic [8:0]  kernel_position;   // Current position in the kernel
+    logic [15:0] dots_per_channel;  // The number of dot products per channel
 } conv_context_t;
-
 
 // === Convolution Module ===
 //
-// This module encompasses the entire CNN model.
-// It reads its layer description as an instruction from a memory block,
-// and it uses the int8_vector_core module to perform the actual convolution operations.
-// The convolution module is designed to be flexible and can handle various types of convolutional layers,
-// including depthwise, pointwise, and fully connected layers.
-// There are certain limitations and constraints on model architecture that are imposed by the instructions.
+// This module implements a flexible convolution engine for CNN models.
+// It supports depthwise, pointwise, and fully connected layers, with configurable parameters.
+// The module uses an instruction-driven approach to define layer properties and operations.
+//
+// Key Features:
+// - Instruction-based configuration for convolution layers.
+// - Supports depthwise, pointwise, and fully connected layers.
+// - Handles input tensors and weights in various formats.
+// - Integrates with the int8_vector_core module for efficient dot product computation.
+// - Designed for FPGA deployment, specifically targeting the DE10-Lite.
+//
+// Limitations:
+// - Assumes input tensors and weights are preloaded into memory.
+// - Requires explicit padding and stride values for convolution layers.
+// - Fixed maximum tensor and parameter memory sizes.
+//
+// Instruction Format:
+// - 32-bits[63:32]: Experimental instruction block.
+// - 4-bits [63:60]: Relationship between batch and channels (log2 of batches per channel or literal of channels per batch).
+// - 1-bit  [59]: First pointwise convolution (1) or not (0).
+// - 1-bit  [31]: First block (1) or not (0).
+// - 1-bit  [30]: Apply ReLU (1) or not (0).
+// - 1-bit  [29]: Global Average Pooling (1) or not (0).
+// - 3-bits [28:26]: MaxPool log2 size (0 for no pooling).
+// - 4-bits [25:22]: Padding (Implies a max kernel size of 31).
+// - 4-bits [21:18]: Temporal length (log2 of time steps).
+// - 6-bits [17:12]: Channels in (log2 of input channels or literal if first block).
+// - 4-bits [11:8]: Channels out (log2 of output channels).
+// - 4-bits [7:4]: Shift amount for quantization to int8.
+// - 4-bits [3:0]: Packet size (ceiling of the (log2 of the kernel size) - 1).
+//
+// Context Struct:
+// - Holds semantic information for the convolution operation.
+// - Includes parameters like padding, tensor size, kernel size, stride, and more.
+// - Used to manage state and offsets during vector packing and dot product computation.
+//
+// Integration:
+// - The module interfaces with the int8_vector_core for dot product operations.
+// - Results are stored in intermediate buffers for further processing.
+// - Designed to work seamlessly with BRAM for parameter and instruction storage.
+//
+// Simulation Notes:
+// - Includes initial blocks for test data population.
+// - These should be removed in production deployments.
+//
+// Usage:
+// - Configure the instruction memory with layer descriptions.
+// - Load input tensors and weights into memory.
+// - Trigger the module with the start signal.
+// - Monitor the busy and done signals for operation status.
+// - Retrieve results from the intermediate buffers after processing.
 //
 
 
 // This signature will be changed once development is complete.
-// Instructions will be read from a memory block.
+// Inferred class will be driven by ArgMax and thus will not be signed.
+// Also, the inferred class will likely be smaller than 8 bits.
 module convolution (
     input logic clk,
     input logic reset,
     input logic start,
     input logic signed [7:0] input_tensor [0:8191],
-    input logic [63:0] current_instr,
-    output logic [7:0] inferred_class,
+    output logic signed [7:0] inferred_class, 
     output logic busy,
     output logic done
 );
 
     // These figures are based on the intended target hardware: DE10-Lite FPGA
-    // We intend to use BRAM for parameters, instructions and intermediate results.
     localparam int PARAM_MEM_DEPTH = 131072;
     localparam int INSTR_MEM_DEPTH = 256;
 
+    // These are the memory blocks for parameters and instructions.
+    // In their current form, they are only used for simulation purposes.
+    // We will need to replace them with actual BRAM in production.
     //initial $readmemh("parameters.hex", param_mem);
     initial $readmemh("instructions.hex", instr_mem);
 
-    // Instruction Format:
-
-    // 32-bits[63:32]  - Experimental instruction block
-    // 4-bits [63:60]  - Relationship between batch and channels (log2 of batches per channel or literal of channels per batch)
-    // 1-bit  [59]     - First pointwise convolution (1) or not (0) (allows non-standard channel sizes)
-
-    // 1-bit  [31]     - First block (1) or not (0)
-    // 1-bit  [30]     - Apply ReLU (1) or not (0)
-    // 1-bit  [29]     - Global Average Pooling (1) or not (0)
-    // 3-bits [28:26]  - MaxPool log2 size (0 for no pooling)
-    // 4-bits [25:22]  - Padding (Implies a max kernel size of 31)
-    // 4-bits [21:18]  - Temporal length (log2 of time steps) (Max literal of 32768)
-    // 6-bits [17:12]  - Channels in (log2 of input channels or literal if first block)
-    // 4-bits [11:8]   - Channels out (log2 of output channels)
-    // 4-bits [7:4]    - Shift amount for quantization to int8
-    // 4-bits [3:0]    - Packet size (ceiling of the (log2 of the kernel size) - 1)
-
     conv_context_t ctx;  // Semantically rich context for the convolution operation
     logic temporal_axis; // Indicates if the tensor is aligned in memory in temporal-major order
-    logic [31:0] batches_processed; // Number of batches processed so far
     logic partial_product; // Flag to indicate the dot product being computed is larger than 256 elements wide.
-    //logic [63:0] current_instr;  // Current instruction being processed
-    logic [15:0] current_batch; // Current batch of 256 inputs and parameters being processed
+    
+    logic [63:0] instr_mem [0:INSTR_MEM_DEPTH-1]; // Instruction memory for CNN layers
+    logic [63:0] current_instr;  // Current instruction being processed
+    logic [7:0] instruction_pointer; // Pointer to the current instruction being processed
 
+    logic [15:0] current_batch; // Current batch of 256 inputs and parameters being processed
+    logic [15:0] batches_processed; // Number of batches processed so far
 
     logic signed [7:0] param_mem [0:PARAM_MEM_DEPTH-1]; // Parameter memory for weights
-    logic [63:0] instr_mem [0:INSTR_MEM_DEPTH-1]; // Instruction memory for CNN layers
-    
-    
     logic [31:0] pointer_advance; // The amount to advance the parameter pointer after current layer
+    
     logic signed [7:0] intermediate_results [0:16383][2]; // Intermediate results buffer
     logic signed [7:0] vector_a [0:255]; // Vector A for dot product
     logic signed [7:0] vector_b [0:255]; // Vector B for dot product
     logic signed [7:0] dot_product_return [0:63]; // Dot product results
     logic signed [31:0] raw_output; // Raw output for partial products
+
+    logic layer_complete; // Indicates if the current layer processing is complete
+
 
     // Raw Instruction Fields
     logic first_pw; // First pointwise convolution in the model
@@ -119,8 +155,8 @@ module convolution (
     // === These are just for simulation and must be removed in production ===
     initial begin
         // Populate weight memory with some test data
-        for (int i = 0; i < 169; i++) begin
-            param_mem[i] = i - 84;
+        for (int i = 0; i < 1001; i++) begin
+            param_mem[i] = (i - 84) % 128;
         end
     end
 
@@ -167,9 +203,9 @@ module convolution (
             out_chan = in_channels;
         end else if (first_pw) begin
             in_chan = in_channels;
-            out_chan = 1 << out_channels; // Pointwise convolution
+            out_chan = 1 << out_channels;
         end else begin
-            // Subsequent Blocks: Use log2 of in_channels
+            // Subsequent Blocks: Use log2 of channels
             in_chan = 1 << in_channels;
             out_chan = 1 << out_channels;
         end
@@ -188,7 +224,6 @@ module convolution (
             ctx.stride = 1;
             ctx.tensor_size = temporal_length * in_chan;
             ctx.in_chan = in_chan;
-            ctx.weight_pointer = 0; // Pointer to the start of weights
             ctx.data_context = 0;
             temporal_axis = 0;
             ctx.dots_per_channel = temporal_length;
@@ -333,12 +368,16 @@ module convolution (
     always_ff @(posedge clk) begin
         if (reset) begin
             current_batch <= 0;
+            layer_complete <= 1'b0;
+            instruction_pointer <= 0;
+            ctx.weight_pointer <= 0; // Reset weight pointer
             busy <= 1'b0;
             done <= 1'b0;
             ctx.pong <= 0;
             batches_processed <= 0;
 
         end else if (start) begin
+            current_instr <= instr_mem[instruction_pointer];
             busy <= 1'b1;
             done <= 1'b0;
 
@@ -356,7 +395,8 @@ module convolution (
                 end else begin
                     // End of the layer, prepare for the next one
                     current_batch <= 0;
-                    done <= 1'b1; // Indicate that the layer processing is done
+                    layer_complete <= 1'b1; // Indicate that the layer processing is done
+                    busy <= 1'b0; // Reset busy signal
                 end
             end
 
@@ -366,6 +406,24 @@ module convolution (
                     current_batch <= current_batch + 1;
                 end
             end
+        end else if (layer_complete) begin
+            // Layer processing is complete, reset for the next layer
+            ctx.pong <= ~ctx.pong; // Toggle pong for the next layer
+            batches_processed <= 0;
+            ctx.weight_pointer <= ctx.weight_pointer + pointer_advance; // Advance the weight pointer
+            $display("Layer complete. Preparing for next layer...");
+            if (instr_mem[instruction_pointer + 1] != 0) begin
+                // Load the next instruction
+                current_instr <= instr_mem[instruction_pointer + 1];
+                instruction_pointer <= instruction_pointer + 1;
+                busy <= 1'b1; // Set busy signal for the next layer
+            end else begin
+                // No more instructions, signal done
+                busy <= 1'b0;
+                done <= 1'b1;
+                inferred_class <= intermediate_results[0][~ctx.pong];
+            end
+            layer_complete <= 1'b0; // Reset layer complete flag
         end
     end
 endmodule

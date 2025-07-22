@@ -5,8 +5,7 @@ module convolution_tb;
     logic clk = 0;
     logic reset = 0;
     logic signed [7:0] input_tensor [0:8191];
-    logic [63:0] current_instr;
-    logic [7:0] inferred_class;
+    logic signed [7:0] inferred_class;
     logic busy;
     logic done;
     logic start;
@@ -17,7 +16,6 @@ module convolution_tb;
         .reset(reset),
         .start(start),
         .input_tensor(input_tensor),
-        .current_instr(current_instr),
         .inferred_class(inferred_class),
         .busy(busy),
         .done(done)
@@ -39,25 +37,6 @@ module convolution_tb;
         for (int i = 0; i < 1664; i++) begin
             input_tensor[i] = i % 256 - 128; // Example input data
         end        
-
-        // Instruction format recap:
-        // 31 = first_block
-        // 30 = relu_active
-        // 29 = global_avg_pool
-        // 28:26 = maxpool (log2)
-        // 25:22 = padding
-        // 21:18 = temporal length (log2)
-        // 17:12 = in_channels (log2 or literal)
-        // 11:8  = out_channels (log2)
-        // 7:4   = shift
-        // 3:0   = packet size (log2 of pack_size - 1)
-
-        // Example: First block, no relu, no GAP, single pooling(kernel = 2),
-        // padding=6 (13x1 kernel), time_steps=7 (128),
-        // in_channels=13 (literal=13), out_channels=ignored,
-        // shift=0, packet=3 (pack_size=16)
-        current_instr = 64'h30000000819CD0A3;
-        // current_instr =    64'b_0011_1000_0000_0000_0000_0000_0000_0000_0_1_0_010_0000_0111_001101_0110_0000_0011;
         @(posedge clk);
         $display("Decoded Instruction:");
         $display("  first_block     = %b", uut.ctx.first_block);
@@ -88,9 +67,9 @@ module convolution_tb;
         wait(done);
         $display("Done signal received. Test completed successfully.");
         for (int i = 1600; i < 1665; i++) begin
-            $display("intermediate[%0d] = %0d", i, uut.intermediate_results[i][~uut.ctx.pong]);
+            $display("intermediate[%0d] = %0d", i, uut.intermediate_results[i][uut.ctx.pong]);
         end
-
+        $display("inferred_class = %d", inferred_class);
         $finish;
     end
 endmodule

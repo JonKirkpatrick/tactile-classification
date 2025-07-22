@@ -1,0 +1,106 @@
+# vsim -c convolution_tb 
+# Start time: 15:16:38 on Jul 21,2025
+# Loading sv_std.std
+# Loading work.convolution_tb
+# Loading work.convolution_sv_unit
+# Loading work.convolution
+# Loading work.int8_vector_core
+# Decoded Instruction:
+#   first_block     = 1
+#   relu_active     = 0
+#   global_avg_pool = 0
+#   maxpool         = 0
+#   padding         =  6
+#   time_steps      =  7 (temporal_length =   128)
+#   in_channels     =  13 (in_chan =  13)
+#   out_channels    =  13 (out_chan =  13)
+#   kernel_size     =  13
+#   stride          =   1
+#   group_size      =  13
+#   pack_size       =  16
+#   pack_count      =  16
+#   pack_batch      =        104
+#   tap_level       =  4
+#   shift_amt       = 10
+#   batch_chan_ref  =  3
+#   current_batch   =     0
+#   current_channel =   0
+#   temporal_position =     0
+#   current_group =   0
+#   dots_per_channel =   128
+#   first_pw = 0
+#   vector_a = '{0, 0, 0, 0, 0, 0, -128, -115, -102, -89, -76, -63, -50, 0, 0, 0, 0, 0, 0, 0, 0, -128, -115, -102, -89, -76, -63, -50, -37, 0, 0, 0, 0, 0, 0, 0, -128, -115, -102, -89, -76, -63, -50, -37, -24, 0, 0, 0, 0, 0, 0, -128, -115, -102, -89, -76, -63, -50, -37, -24, -11, 0, 0, 0, 0, 0, -128, -115, -102, -89, -76, -63, -50, -37, -24, -11, 2, 0, 0, 0, 0, -128, -115, -102, -89, -76, -63, -50, -37, -24, -11, 2, 15, 0, 0, 0, -128, -115, -102, -89, -76, -63, -50, -37, -24, -11, 2, 15, 28, 0, 0, 0, -115, -102, -89, -76, -63, -50, -37, -24, -11, 2, 15, 28, 41, 0, 0, 0, -102, -89, -76, -63, -50, -37, -24, -11, 2, 15, 28, 41, 54, 0, 0, 0, -89, -76, -63, -50, -37, -24, -11, 2, 15, 28, 41, 54, 67, 0, 0, 0, -76, -63, -50, -37, -24, -11, 2, 15, 28, 41, 54, 67, 80, 0, 0, 0, -63, -50, -37, -24, -11, 2, 15, 28, 41, 54, 67, 80, 93, 0, 0, 0, -50, -37, -24, -11, 2, 15, 28, 41, 54, 67, 80, 93, 106, 0, 0, 0, -37, -24, -11, 2, 15, 28, 41, 54, 67, 80, 93, 106, 119, 0, 0, 0, -24, -11, 2, 15, 28, 41, 54, 67, 80, 93, 106, 119, -124, 0, 0, 0, -11, 2, 15, 28, 41, 54, 67, 80, 93, 106, 119, -124, -111, 0, 0, 0}
+#   vector_b = '{-84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0, -84, -71, -58, -45, -32, -19, -6, 7, 20, 33, 46, 59, 72, 0, 0, 0}
+# Layer complete. Preparing for next layer...
+# Layer complete. Preparing for next layer...
+# Done signal received. Test completed successfully.
+# intermediate[1600] = 0
+# intermediate[1601] = 0
+# intermediate[1602] = 127
+# intermediate[1603] = 0
+# intermediate[1604] = 0
+# intermediate[1605] = 127
+# intermediate[1606] = 0
+# intermediate[1607] = 0
+# intermediate[1608] = 0
+# intermediate[1609] = 127
+# intermediate[1610] = 127
+# intermediate[1611] = 0
+# intermediate[1612] = 127
+# intermediate[1613] = 127
+# intermediate[1614] = 0
+# intermediate[1615] = 127
+# intermediate[1616] = 0
+# intermediate[1617] = 0
+# intermediate[1618] = 127
+# intermediate[1619] = 0
+# intermediate[1620] = 0
+# intermediate[1621] = 127
+# intermediate[1622] = 0
+# intermediate[1623] = 0
+# intermediate[1624] = 0
+# intermediate[1625] = 127
+# intermediate[1626] = 127
+# intermediate[1627] = 0
+# intermediate[1628] = 127
+# intermediate[1629] = 127
+# intermediate[1630] = 0
+# intermediate[1631] = 127
+# intermediate[1632] = 0
+# intermediate[1633] = 0
+# intermediate[1634] = 127
+# intermediate[1635] = 0
+# intermediate[1636] = 0
+# intermediate[1637] = 127
+# intermediate[1638] = 0
+# intermediate[1639] = 0
+# intermediate[1640] = 0
+# intermediate[1641] = 127
+# intermediate[1642] = 127
+# intermediate[1643] = 0
+# intermediate[1644] = 127
+# intermediate[1645] = 127
+# intermediate[1646] = 0
+# intermediate[1647] = 127
+# intermediate[1648] = 0
+# intermediate[1649] = 0
+# intermediate[1650] = 127
+# intermediate[1651] = 0
+# intermediate[1652] = 0
+# intermediate[1653] = 127
+# intermediate[1654] = 0
+# intermediate[1655] = 0
+# intermediate[1656] = 0
+# intermediate[1657] = 127
+# intermediate[1658] = 127
+# intermediate[1659] = 0
+# intermediate[1660] = 127
+# intermediate[1661] = 127
+# intermediate[1662] = 0
+# intermediate[1663] = 127
+# intermediate[1664] = 127
+# inferred_class =  -19
+# ** Note: $finish    : convolution_tb.sv(73)
+#    Time: 12475 ns  Iteration: 2  Instance: /convolution_tb
+# End time: 15:16:41 on Jul 21,2025, Elapsed time: 0:00:03
+# Errors: 0, Warnings: 0
