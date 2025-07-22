@@ -129,7 +129,13 @@ module convolution (
     logic signed [7:0] dot_product_return [0:63]; // Dot product results
     logic signed [31:0] raw_output; // Raw output for partial products
 
+    logic [255:0] pool_counter;
+    logic [255:0] total_pools;
+    logic [255:0] j;
+    logic [255:0] current_index;
+
     logic layer_complete; // Indicates if the current layer processing is complete
+    logic flush;
 
 
     // Raw Instruction Fields
@@ -165,6 +171,7 @@ module convolution (
         .clk(clk),
         .rst(reset),
         .start(start),
+        .flush(flush),
         .input_a(vector_a),
         .input_b(vector_b),
         .tap_level(tap_level),
@@ -363,7 +370,6 @@ module convolution (
             end
         end
     end
-
     // === The actual convolution operation ===
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -375,6 +381,9 @@ module convolution (
             done <= 1'b0;
             ctx.pong <= 0;
             batches_processed <= 0;
+            pool_counter <= 0;
+            j <= 0;
+            total_pools <= 0;
 
         end else if (start) begin
             current_instr <= instr_mem[instruction_pointer];
@@ -383,20 +392,43 @@ module convolution (
 
         end else if (busy) begin
             if (valid) begin
-                // Process the current batch of convolution
                 if (batches_processed < ctx.pack_batch) begin
-                    // Perform the dot product operation
+                    // $display("Current value of j is %0d and pool_counter is %0d, while total_pools is %0d", j, pool_counter, total_pools);
                     for (int i = 0; i < 64; i++) begin
                         if (i < ctx.pack_count) begin
-                            intermediate_results[batches_processed * ctx.pack_count + i][~ctx.pong] <= dot_product_return[i];
+                            automatic int index = batches_processed * ctx.pack_count + i - (total_pools + pool_counter) * out_chan;
+                            if (pool_counter == 0) begin
+                                intermediate_results[index][~ctx.pong] <= dot_product_return[i];
+                            end else begin
+                                if (dot_product_return[i] > intermediate_results[index][~ctx.pong]) begin
+                                    intermediate_results[index][~ctx.pong] <= dot_product_return[i];
+                                end
+                            end
+                            j <= j + ctx.pack_count;
                         end
                     end
+
+                    // Pooling book-keeping: advance pool counter
+                    if (j == out_chan - ctx.pack_count) begin
+                        j <= 0;
+                        if (pool_counter < pool_amt[0] - 1 && pool_amt[0] > 1) begin
+                            pool_counter <= pool_counter + 1;
+                        end else if (pool_amt[0] > 1) begin
+                            total_pools <= total_pools + pool_amt[0] - 1;
+                            pool_counter <= 0;
+                        end else begin
+                            pool_counter <= 0; // Reset pool counter if no pooling
+                        end
+                    end
+
                     batches_processed <= batches_processed + 1;
+
                 end else begin
-                    // End of the layer, prepare for the next one
+                    // Layer complete
                     current_batch <= 0;
-                    layer_complete <= 1'b1; // Indicate that the layer processing is done
-                    busy <= 1'b0; // Reset busy signal
+                    layer_complete <= 1'b1;
+                    busy <= 1'b0;
+                    flush <= 1'b1; // Signal to flush the pipeline
                 end
             end
 
@@ -406,12 +438,16 @@ module convolution (
                     current_batch <= current_batch + 1;
                 end
             end
+
         end else if (layer_complete) begin
             // Layer processing is complete, reset for the next layer
             ctx.pong <= ~ctx.pong; // Toggle pong for the next layer
             batches_processed <= 0;
+            total_pools <= 0;
+            j <= 0; // Reset j for the next layer
+            pool_counter <= 0; // Reset pool counter for the next layer
+
             ctx.weight_pointer <= ctx.weight_pointer + pointer_advance; // Advance the weight pointer
-            $display("Layer complete. Preparing for next layer...");
             if (instr_mem[instruction_pointer + 1] != 0) begin
                 // Load the next instruction
                 current_instr <= instr_mem[instruction_pointer + 1];
@@ -424,6 +460,7 @@ module convolution (
                 inferred_class <= intermediate_results[0][~ctx.pong];
             end
             layer_complete <= 1'b0; // Reset layer complete flag
+            flush <= 1'b0; // Reset flush signal
         end
     end
 endmodule

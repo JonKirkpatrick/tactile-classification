@@ -2,6 +2,7 @@ module int8_vector_core (
     input  logic clk,
     input  logic rst,
     input  logic start,
+    input  logic flush,
 
     input  logic signed [7:0] input_a [256],
     input  logic signed [7:0] input_b [256],
@@ -176,7 +177,10 @@ module int8_vector_core (
     logic [PIPELINE_DEPTH-1:0] delay_line;
 
     always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
+        if (flush) begin
+            delay_line <= '0;
+            toggle <= 1'b0;
+        end else if (rst) begin
             delay_line <= '0;
             toggle <= 1'b0;
         end else if (start) begin

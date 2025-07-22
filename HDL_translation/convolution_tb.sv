@@ -66,7 +66,7 @@ module convolution_tb;
         $display("  vector_b = %p", uut.vector_b);
         wait(done);
         $display("Done signal received. Test completed successfully.");
-        for (int i = 1600; i < 1665; i++) begin
+        for (int i = 0; i < 8192; i++) begin
             $display("intermediate[%0d] = %0d", i, uut.intermediate_results[i][uut.ctx.pong]);
         end
         $display("inferred_class = %d", inferred_class);
