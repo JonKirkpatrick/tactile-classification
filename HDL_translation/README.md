@@ -8,12 +8,12 @@ This repository contains all of the Verilog modules designed to perform moderate
 
 ### `conv_core.sv`
 This is the primary controller for all convolution operations. It delegates memory address 
-determination and dot product computation to subordinate modules, but reatains the function of populating
+determination and dot product computation to subordinate modules, but retains the function of populating
 vectors with actual data for consumption by the int_8_vector_core and subsequently places the output
 into an appropriate buffer for use in the next layer  The main loop of the conv_core module is concerned
 with the completion of a single convolution, including optional activation and pooling:
 - Depthwise, Pointwise, and Fully Connected layers are handled first
-- ReLU is applied in the int8_vector_core is applicable
+- ReLU is applied in the int8_vector_core if applicable
 - MaxPool and Global Average Pool follow any concolution that may be present in an instruction.
 From the perspective of the conv_core, each of these operations are identical and it is principally just
 packing and unpacking vectors to complete its work.
@@ -28,7 +28,7 @@ A specialized computation unit that:
 
 ### `instruction_handler.sv` 
 A module concerned with parsing instructions and using this information to determine:
-- The optimal vector packing strategy for the layer
+- The optimal vector packing strategy for the layer given the power of two packaging size constraint
 - Addresses translation for use by the conv_core module
 - Tensor traversal
 - Making pertinent information about a particular instruction available to the modules in need of said information
