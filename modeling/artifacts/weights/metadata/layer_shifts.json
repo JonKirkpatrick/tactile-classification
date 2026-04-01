@@ -1,0 +1,38 @@
+{
+  "blocks.0.sc_dw": {
+    "shift_exp": 7.0,
+    "scale": 128.0
+  },
+  "blocks.0.sc_pw": {
+    "shift_exp": 6.0,
+    "scale": 64.0
+  },
+  "blocks.1.sc_dw": {
+    "shift_exp": 8.0,
+    "scale": 256.0
+  },
+  "blocks.1.sc_pw": {
+    "shift_exp": 7.0,
+    "scale": 128.0
+  },
+  "blocks.2.sc_dw": {
+    "shift_exp": 6.0,
+    "scale": 64.0
+  },
+  "blocks.2.sc_pw": {
+    "shift_exp": 7.0,
+    "scale": 128.0
+  },
+  "blocks.3.sc_dw": {
+    "shift_exp": 6.0,
+    "scale": 64.0
+  },
+  "blocks.3.sc_pw": {
+    "shift_exp": 8.0,
+    "scale": 256.0
+  },
+  "final_shift": {
+    "shift_exp": 3.0,
+    "scale": 8.0
+  }
+}

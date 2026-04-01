@@ -1,0 +1,8 @@
+Ramped up the pressure on denim to see if there was any improvement over the first weighted test.
+There wasn't.  This is still using: 
+
+spec = (13, 128, [(9, 64, 2), (7, 128, 2), (5, 256, 2), (3, 256, 2)], 12)
+
+This time I cranked up the denims right to 1.8.
+
+Final accuracy ~92%, no appreciable improvement on separation.

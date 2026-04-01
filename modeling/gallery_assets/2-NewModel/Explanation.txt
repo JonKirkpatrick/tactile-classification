@@ -1,0 +1,6 @@
+A more intuitive model spec
+spec = (13, 128, [(9, 64, 2), (7, 128, 2), (5, 256, 2), (3, 256, 2)], 12)
+
+The training run was the same as the baseline.  Not much different in terms
+of performance, but fewer parameters and a less crazy looking pooling profile.
+Final accuracy ~92%

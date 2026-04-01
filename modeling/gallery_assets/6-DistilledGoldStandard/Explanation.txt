@@ -1,0 +1,5 @@
+Used CoPilot's model as a teacher for my NewModel variant 
+spec = (13, 128, [(9, 64, 2), (7, 128, 2), (5, 256, 2), (3, 256, 2)], 12)
+
+Distilled for 10 epochs then entered the regular quantization loop.
+Finished at ~92%.  Denim separation was no better.

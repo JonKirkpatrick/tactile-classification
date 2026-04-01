@@ -1,28 +1,17 @@
+
 import torch
 from training.quantize_weights import quantize_and_freeze_layer, scale_weights_in_place, quantize_weights_in_place
 
 
-def train_model(
-    model,
-    train_loader,
-    val_loader,
-    device,
-    num_epochs,
-    criterion,
-    optimizer
-):    
-
+def train_model(model, train_loader, val_loader, device, num_epochs, criterion, optimizer):    
+    local_history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+    
     for epoch in range(num_epochs):
         # ---- Training ----
         model.train()
-        running_loss = 0.0
-        correct = 0
-        total = 0
-
+        running_loss, correct, total = 0.0, 0, 0
         for inputs, targets in train_loader:
-            inputs = inputs.to(device)
-            targets = targets.to(device)
-
+            inputs, targets = inputs.to(device), targets.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
@@ -34,36 +23,98 @@ def train_model(
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-        train_loss = running_loss / total
-        train_acc = correct / total
-
         # ---- Validation ----
         model.eval()
-        val_loss = 0.0
-        val_correct = 0
-        val_total = 0
-
+        v_loss, v_correct, v_total = 0.0, 0, 0
         with torch.no_grad():
             for inputs, targets in val_loader:
-                inputs = inputs.to(device)
-                targets = targets.to(device)
-
+                inputs, targets = inputs.to(device), targets.to(device)
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
-
-                val_loss += loss.item() * targets.size(0)
+                v_loss += loss.item() * targets.size(0)
                 _, predicted = outputs.max(1)
-                val_total += targets.size(0)
-                val_correct += predicted.eq(targets).sum().item()
+                v_total += targets.size(0)
+                v_correct += predicted.eq(targets).sum().item()
 
-        val_loss /= val_total
-        val_acc = val_correct / val_total
+        # Store metrics
+        local_history['train_loss'].append(running_loss / total)
+        local_history['train_acc'].append(correct / total)
+        local_history['val_loss'].append(v_loss / v_total)
+        local_history['val_acc'].append(v_correct / v_total)
+        
+        print(f"Epoch {epoch+1}/{num_epochs} | Val Acc: {v_correct/v_total:.4f}")
+
+    return local_history # Return the data to the caller
+
+
+def train_model_with_distillation(
+    model,
+    teacher_model,
+    train_loader,
+    val_loader,
+    device,
+    num_epochs,
+    criterion,
+    optimizer,
+    alpha=0.3,
+    temperature=3.0,
+):
+    local_history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+    kl_div = torch.nn.KLDivLoss(reduction='batchmean')
+
+    teacher_model.eval()
+
+    for epoch in range(num_epochs):
+        model.train()
+        running_loss, correct, total = 0.0, 0, 0
+
+        for inputs, targets in train_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            optimizer.zero_grad()
+
+            student_logits = model(inputs)
+            with torch.no_grad():
+                teacher_out = teacher_model(inputs)
+                # Support teacher outputs that are either logits or (logits, embedding).
+                teacher_logits = teacher_out[0] if isinstance(teacher_out, tuple) else teacher_out
+
+            ce_loss = criterion(student_logits, targets)
+            student_log_probs = torch.log_softmax(student_logits / temperature, dim=1)
+            teacher_probs = torch.softmax(teacher_logits / temperature, dim=1)
+            distill_loss = kl_div(student_log_probs, teacher_probs) * (temperature ** 2)
+            loss = (1.0 - alpha) * ce_loss + alpha * distill_loss
+
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item() * targets.size(0)
+            _, predicted = student_logits.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+
+        model.eval()
+        v_loss, v_correct, v_total = 0.0, 0, 0
+        with torch.no_grad():
+            for inputs, targets in val_loader:
+                inputs, targets = inputs.to(device), targets.to(device)
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+                v_loss += loss.item() * targets.size(0)
+                _, predicted = outputs.max(1)
+                v_total += targets.size(0)
+                v_correct += predicted.eq(targets).sum().item()
+
+        local_history['train_loss'].append(running_loss / total)
+        local_history['train_acc'].append(correct / total)
+        local_history['val_loss'].append(v_loss / v_total)
+        local_history['val_acc'].append(v_correct / v_total)
 
         print(
-            f"Epoch {epoch+1:3d} | "
-            f"Train Loss {train_loss:.4f}, Acc {train_acc:.4f} | "
-            f"Val Loss {val_loss:.4f}, Acc {val_acc:.4f}"
+            f"Epoch {epoch+1}/{num_epochs} | "
+            f"Val Acc: {v_correct/v_total:.4f} | Distill alpha={alpha:.2f}, T={temperature:.2f}"
         )
+
+    return local_history
 
 def get_quantization_schedule(model):
     """
@@ -100,9 +151,13 @@ def set_quantization_state(layer_info, enabled=True):
         parent_module.final_shift.quant_on = enabled
     """
 
-def train_quantized_pipeline(model, train_loader, val_loader, device, optimizer, mode='freeze'):
+def train_quantized_pipeline(model, train_loader, val_loader, device, optimizer, mode='freeze', save_callback=None):
     schedule = get_quantization_schedule(model)
     criterion = torch.nn.CrossEntropyLoss()
+    local_history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+    def update_history(new_data):
+        for key in local_history:
+            local_history[key].extend(new_data[key])
     
     # We maintain the global layer_scales across the passes
     if not hasattr(model, 'layer_scales'):
@@ -115,8 +170,9 @@ def train_quantized_pipeline(model, train_loader, val_loader, device, optimizer,
         set_quantization_state(layer_info, enabled=True)
         print(f"\n>>> Training with Quantization Noise on {layer_path}...")
         
-        train_model(model, train_loader, val_loader, device, num_epochs=5, 
+        quant_history = train_model(model, train_loader, val_loader, device, num_epochs=5, 
                     criterion=criterion, optimizer=optimizer)
+        update_history(quant_history)
 
         # 2. Handle Weights based on Pass Mode
         if mode == 'scale':
@@ -139,7 +195,11 @@ def train_quantized_pipeline(model, train_loader, val_loader, device, optimizer,
             break            
 
         # 3. Train the "Current State"
-        train_model(model, train_loader, val_loader, device, num_epochs=5, 
+        phase_history = train_model(model, train_loader, val_loader, device, num_epochs=5, 
                     criterion=criterion, optimizer=optimizer)
+        update_history(phase_history)
+        if save_callback:
+            save_callback(f"{mode}_{layer_path.replace('.', '_')}")
 
     print("\n✓ Grand Unified Training Complete.")
+    return local_history

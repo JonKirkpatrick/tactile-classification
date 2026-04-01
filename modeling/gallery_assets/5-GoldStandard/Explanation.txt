@@ -1,0 +1,4 @@
+Let CoPilot write an unconstrained model to learn the data.
+Canonical trainer is now scripts/train/train_teacher.py
+It managed to hit 97% validation accuracy after 40 epochs and plateaued at around epoch 27 with minor,
+but steady improvement thereafter.

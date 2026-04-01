@@ -1,0 +1,20 @@
+My original model spec.
+spec = (13, 128, [(7, 64, None), (3, 128, 2), (13, 256, 16), (3, 256, None)], 12)
+
+Warmup:
+optimizer = optim.Adam(
+    model.parameters(),
+    lr=1e-3,
+    eps=1e-8,
+    weight_decay=1e-5
+)
+
+Quantize:
+optimizer = optim.Adam(
+    model.parameters(),
+    lr=5e-4,
+    eps=1e-8,
+    weight_decay=1e-6
+)
+
+Ran 10 warm up epochs and the regular training loop.  Finished with ~92% validation accuracy.

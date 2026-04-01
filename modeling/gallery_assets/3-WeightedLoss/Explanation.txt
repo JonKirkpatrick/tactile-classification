@@ -1,0 +1,4 @@
+Introduced weighted cross-entropy loss to see if I could induce class separation for denim.
+Model spec = (13, 128, [(9, 64, 2), (7, 128, 2), (5, 256, 2), (3, 256, 2)], 12)
+At a 30% penalty on denim there was modest, if any gain on separation.
+Final accuracy ~92%

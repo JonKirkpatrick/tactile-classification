@@ -1,0 +1,122 @@
+{
+  "model": {
+    "input": {
+      "channels": 13,
+      "temporal_length": 128
+    },
+    "layers": [
+      {
+        "name": "blk0_depthwise",
+        "type": "depthwise_conv1d",
+        "kernel": 9,
+        "stride": 1,
+        "padding": 4,
+        "in_channels": 13,
+        "out_channels": 13,
+        "activation": null,
+        "shift_log2": 7
+      },
+      {
+        "name": "blk0_pointwise",
+        "type": "pointwise_conv1d",
+        "kernel": 1,
+        "stride": 1,
+        "padding": 0,
+        "in_channels": 13,
+        "out_channels": 64,
+        "pool_factor": null,
+        "activation": "relu",
+        "shift_log2": 6
+      },
+      {
+        "name": "blk1_depthwise",
+        "type": "depthwise_conv1d",
+        "kernel": 7,
+        "stride": 1,
+        "padding": 3,
+        "in_channels": 64,
+        "out_channels": 64,
+        "activation": null,
+        "shift_log2": 8
+      },
+      {
+        "name": "blk1_pointwise",
+        "type": "pointwise_conv1d",
+        "kernel": 1,
+        "stride": 1,
+        "padding": 0,
+        "in_channels": 64,
+        "out_channels": 128,
+        "pool_factor": null,
+        "activation": "relu",
+        "shift_log2": 7
+      },
+      {
+        "name": "blk2_depthwise",
+        "type": "depthwise_conv1d",
+        "kernel": 5,
+        "stride": 1,
+        "padding": 2,
+        "in_channels": 128,
+        "out_channels": 128,
+        "activation": null,
+        "shift_log2": 6
+      },
+      {
+        "name": "blk2_pointwise",
+        "type": "pointwise_conv1d",
+        "kernel": 1,
+        "stride": 1,
+        "padding": 0,
+        "in_channels": 128,
+        "out_channels": 256,
+        "pool_factor": null,
+        "activation": "relu",
+        "shift_log2": 7
+      },
+      {
+        "name": "blk3_depthwise",
+        "type": "depthwise_conv1d",
+        "kernel": 3,
+        "stride": 1,
+        "padding": 1,
+        "in_channels": 256,
+        "out_channels": 256,
+        "activation": null,
+        "shift_log2": 6
+      },
+      {
+        "name": "blk3_pointwise",
+        "type": "pointwise_conv1d",
+        "kernel": 1,
+        "stride": 1,
+        "padding": 0,
+        "in_channels": 256,
+        "out_channels": 256,
+        "pool_factor": null,
+        "activation": "relu",
+        "shift_log2": 8
+      },
+      {
+        "name": "gap",
+        "type": "global_avg_pool",
+        "in_channels": 256,
+        "out_channels": 256,
+        "collapse_factor": 128
+      },
+      {
+        "name": "final_fc",
+        "type": "fully_connected",
+        "in_features": 256,
+        "out_features": 12,
+        "activation": null,
+        "shift_log2": 3
+      }
+    ],
+    "output": {
+      "final_channels": 256,
+      "final_temporal_length": 1,
+      "target_count": 12
+    }
+  }
+}
